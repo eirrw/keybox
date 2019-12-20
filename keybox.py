@@ -1,11 +1,31 @@
 #!/usr/bin/python3
+"""Keybox
+
+Usage:
+    keybox.py [-hv] [-r REMOTE] [-l LOCAL] DATABASE
+
+Options:
+    -h --help  show this message
+    -v --verbose  show extended output
+    -r REMOTE, --remote REMOTE  rclone remote directory
+    -l --local LOCAL        local directory
+
+    DATABASE                database name
+
+"""
 
 import subprocess
 import os
 import sys
 import hashlib
+import argparse
 from datetime import datetime
+from docopt import docopt
 
+
+DATABASE_NAME = "ewilson.kdbx"
+REMOTE_DIR = "dropbox:keepass"
+LOCAL_DIR  = os.environ['HOME'] + "/keepass"
 
 """
 Implemetation of Dropbox hashing algorithm
@@ -68,31 +88,41 @@ def getRemoteStats():
 
     return remoteStats
 
-rmt = getRemoteStats()
+"""
+Main method
+"""
+def main():
 
-remoteTime = datetime.strptime(rmt["time"], "%Y-%m-%d %H:%M:%S").timestamp()
-remoteHash = rmt["hash"]
+    args = docopt(__doc__)
 
-localTime = os.lstat(LOCAL_DIR  + '/' + DATABASE_NAME).st_mtime
-localHash = hash(LOCAL_DIR  + '/' + DATABASE_NAME)
+    rmt = getRemoteStats()
 
-if not remoteHash == localHash:
-    if remoteTime > localTime:
-        if syncDir(REMOTE_DIR, LOCAL_DIR):
-            print("Synchronized from remote")
+    remoteTime = datetime.strptime(rmt["time"], "%Y-%m-%d %H:%M:%S").timestamp()
+    remoteHash = rmt["hash"]
+
+    localTime = os.lstat(LOCAL_DIR  + '/' + DATABASE_NAME).st_mtime
+    localHash = hash(LOCAL_DIR  + '/' + DATABASE_NAME)
+
+    if not remoteHash == localHash:
+        if remoteTime > localTime:
+            if syncDir(REMOTE_DIR, LOCAL_DIR):
+                print("Synchronized from remote")
+            else:
+                print("Could not sync files!")
+        elif remoteTime < localTime:
+            print("Local database is newer, will sync on exit")
         else:
-            print("Could not sync files!")
-    elif remoteTime < localTime:
-        print("Local database is newer, will sync on exit")
+            print("Files are in sync")
     else:
         print("Files are in sync")
-else:
-    print("Files are in sync")
 
-subprocess.run(["keepassxc"], capture_output=True)
+    subprocess.run(["keepassxc"], capture_output=True)
 
-if syncDir(LOCAL_DIR, REMOTE_DIR):
-    print("Synchronized to remote")
-else:
-    print("Could not synchronize files!")
+    if syncDir(LOCAL_DIR, REMOTE_DIR):
+        print("Synchronized to remote")
+    else:
+        print("Could not synchronize files!")
 
+# execute script
+if __name__ == "__main__":
+    main()
