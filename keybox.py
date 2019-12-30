@@ -2,15 +2,14 @@
 """Keybox
 
 Usage:
-    keybox.py [-hv] [-r REMOTE] [-l LOCAL] DATABASE
+    keybox.py [-hv] [-r REMOTE] [-l LOCAL] [DATABASE]
 
 Options:
-    -h --help  show this message
-    -v --verbose  show extended output
-    -r REMOTE, --remote REMOTE  rclone remote directory
-    -l --local LOCAL        local directory
+    -h --help                       show this message
+    -r REMOTE, --remote REMOTE      rclone remote directory
+    -l LOCAL, --local LOCAL         local directory
 
-    DATABASE                database name
+    DATABASE                        database name
 
 """
 
@@ -18,19 +17,15 @@ import subprocess
 import os
 import sys
 import hashlib
-import argparse
 from datetime import datetime
 from docopt import docopt
 
+DATABASE_DEFAULT = "passwords.kdbx"
+LOCAL_DIR_DEFAULT  = os.environ['HOME'] + "/keepass"
+REMOTE_DIR_DEFAULT = "remote:keepass"
 
-DATABASE_NAME = "ewilson.kdbx"
-REMOTE_DIR = "dropbox:keepass"
-LOCAL_DIR  = os.environ['HOME'] + "/keepass"
-
-"""
-Implemetation of Dropbox hashing algorithm
-"""
-def hash(fname):
+def dropboxHash(fname):
+    """Implemetation of Dropbox hashing algorithm"""
     method = hashlib.sha256()
     bstring = b''
     with open(fname, 'rb') as f:
@@ -43,10 +38,9 @@ def hash(fname):
     result = method.hexdigest()
     return result
 
-"""
-Runs rclone synchronization from source to dest
-"""
 def syncDir(source, dest):
+    """Runs rclone synchronization from source to dest"""
+
     args = [
         "rclone",
         "sync",
@@ -59,27 +53,26 @@ def syncDir(source, dest):
         return False
     return True
 
-"""
-Retreive a dict with the stats of the remote directory
-"""
-def getRemoteStats():
+def getRemoteStats(remoteDir):
+    """Retreive a dict with the stats of the remote directory"""
+
     statOrder = ["path", "time", "size", "hash"]
     args = [
         "rclone",
         "lsf",
         "--hash",
         "DropboxHash",
-        "-F",
+        "--format",
         "ptsh",
-        "-s",
+        "--separator",
         "|",
-        REMOTE_DIR
+        remoteDir
     ]
 
     proc = subprocess.run(args, capture_output=True, text=True)
 
     if proc.returncode is not 0:
-        print(remoteStatCall.stderr)
+        print(proc.stderr)
         exit(1)
 
     result = proc.stdout.strip().split("|")
@@ -88,24 +81,39 @@ def getRemoteStats():
 
     return remoteStats
 
-"""
-Main method
-"""
-def main():
+def processArgs():
+    """Retrieve command line arguments and set local vars, using defaults if needed"""
 
     args = docopt(__doc__)
 
-    rmt = getRemoteStats()
+    remote = local = database = None
+
+    for key, val in args.items():
+        if key == '--remote':
+            remote = val or REMOTE_DIR_DEFAULT
+        elif key == '--local':
+            local = val or LOCAL_DIR_DEFAULT
+        elif key == 'DATABASE':
+            database = val or DATABASE_DEFAULT
+
+    return (remote, local, database)
+
+
+def main():
+    """Main method"""
+
+    remote, local, database = processArgs()
+    rmt = getRemoteStats(remote)
 
     remoteTime = datetime.strptime(rmt["time"], "%Y-%m-%d %H:%M:%S").timestamp()
     remoteHash = rmt["hash"]
 
-    localTime = os.lstat(LOCAL_DIR  + '/' + DATABASE_NAME).st_mtime
-    localHash = hash(LOCAL_DIR  + '/' + DATABASE_NAME)
+    localTime = os.lstat(local  + '/' + database).st_mtime
+    localHash = dropboxHash(local  + '/' + database)
 
     if not remoteHash == localHash:
         if remoteTime > localTime:
-            if syncDir(REMOTE_DIR, LOCAL_DIR):
+            if syncDir(remote, local):
                 print("Synchronized from remote")
             else:
                 print("Could not sync files!")
@@ -118,7 +126,7 @@ def main():
 
     subprocess.run(["keepassxc"], capture_output=True)
 
-    if syncDir(LOCAL_DIR, REMOTE_DIR):
+    if syncDir(local, remote):
         print("Synchronized to remote")
     else:
         print("Could not synchronize files!")
