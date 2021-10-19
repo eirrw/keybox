@@ -49,7 +49,7 @@ def syncDir(source, dest):
     ]
 
     proc = subprocess.run(args, capture_output=True)
-    if proc.returncode is not 0:
+    if proc.returncode != 0:
         return False
     return True
 
@@ -71,7 +71,7 @@ def getRemoteStats(remoteDir):
 
     proc = subprocess.run(args, capture_output=True, text=True)
 
-    if proc.returncode is not 0:
+    if proc.returncode != 0:
         print(proc.stderr)
         exit(1)
 
